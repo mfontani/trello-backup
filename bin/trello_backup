@@ -1,0 +1,122 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use feature qw<say>;
+
+use LWP::UserAgent;
+use Config::INI::Reader;
+use JSON::Diffable qw<encode_json decode_json>;
+use File::Slurp qw<write_file>;
+use HTTP::Request::Common;
+use FindBin;
+
+my $DIR = "$FindBin::Bin/..";
+
+my $config = Config::INI::Reader->read_file("$DIR/config.ini")
+    or die "need a config.ini.";
+my $key = $config->{trello}{key}
+    or die "need a [trello] key = in config.ini";
+my $token = $config->{trello}{token}
+    or die "need a [trello] token = in config.ini. Please run ./bin/trello_backup_request to request one.";
+
+my $ua   = LWP::UserAgent->new;
+my $list_boards_url = sprintf('https://trello.com/1/members/my/boards?key=%s&token=%s',
+    $key, $token);
+my $rc = $ua->get($list_boards_url);
+if (!$rc->is_success) {
+    say "Had troubles loading $list_boards_url:";
+    say $rc->status_line;
+    say $rc->decoded_content;
+    exit 1;
+}
+my $data = backup_to_file('my.boards', $rc);
+die "Listing boards from $list_boards_url didn't result in arrayref!"
+    if ref $data ne 'ARRAY';
+
+my %organizations_by_id;
+
+for my $board (@$data) {
+    next
+        if $board->{prefs} && $board->{prefs}{permissionLevel} && $board->{prefs}{permissionLevel} eq 'public';
+
+    my $board_name = nice_name($board->{name});
+
+    my $org    = 'NO_ORGANIZATION';
+    my $org_id = '0';
+    if (exists $board->{idOrganization} && defined $board->{idOrganization}) {
+        $organizations_by_id{ $board->{idOrganization} } //= get_organization_info($board->{idOrganization});
+        $org    = nice_name($organizations_by_id{ $board->{idOrganization} }->{name});
+        $org_id = $board->{idOrganization};
+    }
+
+    say "Org '$org' board '$board->{name}'..";
+
+    my $get_board_url = sprintf('https://trello.com/1/boards/%s?lists=all&key=%s&token=%s',
+        $board->{id}, $key, $token);
+    $rc = $ua->get($get_board_url);
+    if (!$rc->is_success) {
+        say "Had troubles loading $get_board_url:";
+        say $rc->status_line;
+        say $rc->decoded_content;
+        exit 1;
+    }
+    my $data = backup_to_file("org.$org.$org_id.boards.$board_name.$board->{id}", $rc);
+
+    for my $list (@{ $data->{lists} }) {
+        my $get_list_url = sprintf('https://trello.com/1/lists/%s?cards=all&key=%s&token=%s',
+            $list->{id}, $key, $token);
+        $rc = $ua->get($get_list_url);
+        if (!$rc->is_success) {
+            say "Had troubles loading $get_list_url:";
+            say $rc->status_line;
+            say $rc->decoded_content;
+            exit 1;
+        }
+        my $list_name = nice_name($list->{name});
+        say "... '$list_name'";
+        my $data = backup_to_file("org.$org.$org_id.board.$board_name.$board->{id}.lists.$list_name.$list->{id}", $rc);
+    }
+}
+
+exit 0;
+
+sub backup_to_file {
+    my ($file, $rc) = @_;
+
+    mkdir "$DIR/backups"
+        if !-d "$DIR/backups";
+
+    my $json = $rc->decoded_content;
+    my $data = decode_json($json);
+    my $nice_json = encode_json($data);
+    write_file("$DIR/backups/$file.backup.json", $nice_json);
+    return $data;
+}
+
+sub get_organization_info {
+    my ($id) = @_;
+    my $get_list_url = sprintf('https://trello.com/1/organizations/%s?key=%s&token=%s',
+        $id, $key, $token);
+    $rc = $ua->get($get_list_url);
+    if (!$rc->is_success) {
+        say "Had troubles loading $get_list_url:";
+        say $rc->status_line;
+        say $rc->decoded_content;
+        exit 1;
+    }
+    my $json = $rc->decoded_content;
+    my $data = decode_json($json);
+    return $data;
+}
+
+sub nice_name {
+    my ($thing) = @_;
+
+    return 'NO_NAME'
+        if !defined $thing;
+
+    $thing =~ s,[/!@ *],_,g;
+
+    return $thing;
+}
+

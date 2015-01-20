@@ -1,0 +1,31 @@
+#!/usr/bin/env perl
+use strict;
+use warnings;
+use feature qw<say>;
+use Config::INI::Reader;
+use Config::INI::Writer;
+use FindBin;
+
+my $DIR    = "$FindBin::Bin/..";
+my $config = Config::INI::Reader->read_file("$DIR/config.ini")
+    or die "need a config.ini.";
+
+my $key = $config->{trello}{key}
+    or die "need a [trello] key = in config.ini";
+my $secret = $config->{trello}{secret}
+    or die "need a [trello] secret = in config.ini";
+
+my $request_url = sprintf(
+    'https://trello.com/1/authorize?key=%s&name=%s&expiration=%s&response_type=%s&scope=%s',
+    $key, 'trello_backup', 'never', 'token', 'read,write');
+
+say for "Please go to:", "", $request_url, "", "click ALLOW, and then insert the token you got here:";
+
+my $token = <>;
+chomp $token;
+
+$config->{trello}{token} = $token;
+
+Config::INI::Writer->write_file($config, "$DIR/config.ini");
+
+say "Saved to config.ini.";

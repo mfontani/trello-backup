@@ -24,6 +24,7 @@ First, configure the script by requesting your key and secret:
 * run `./bin/trello_backup_request`
   * follow the URL and authorize the applicaton. You'll be given a code.
   * Insert the code where the application requests for it.
+* ln -s ..../bin/trello_backup ~/bin/
 
 Usage
 =====
@@ -31,6 +32,10 @@ Usage
 Once configured, simply run:
 
     .../bin/trello_backup
+
+or, if you've symlinked to your `~/bin/` directory,
+
+    trello_backup
 
 You could even stick it in `cron`.
 

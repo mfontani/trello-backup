@@ -10,7 +10,7 @@ use File::Slurp qw<write_file>;
 use HTTP::Request::Common;
 use FindBin;
 
-my $DIR = "$FindBin::Bin/..";
+my $DIR = "$FindBin::RealBin/..";
 
 my $config = Config::INI::Reader->read_file("$DIR/config.ini")
     or die "need a config.ini.";

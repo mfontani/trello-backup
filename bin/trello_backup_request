@@ -6,7 +6,7 @@ use Config::INI::Reader;
 use Config::INI::Writer;
 use FindBin;
 
-my $DIR    = "$FindBin::Bin/..";
+my $DIR    = "$FindBin::RealBin/..";
 my $config = Config::INI::Reader->read_file("$DIR/config.ini")
     or die "need a config.ini.";
 
